@@ -1,0 +1,522 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Clock,
+  Search,
+  Filter,
+  Download,
+  Eye,
+  Ban,
+  Shield,
+  Globe,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  UserCheck
+} from 'lucide-react';
+import { connectionApi } from '@/lib/api';
+import { useAllSocket } from '@/hooks/useSocket';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+interface Connection {
+  _id: string;
+  remoteIP: string;
+  remotePort: number;
+  localPort: string;
+  protocol: string;
+  connectionType: string;
+  processName?: string;
+  processId?: number;
+  username?: string;
+  startTime: string;
+  endTime?: string;
+  status: string;
+  isBlocked: boolean;
+  direction?: 'inbound' | 'outbound';
+  domain?: string;
+  browserProcess?: string;
+  isSuspicious?: boolean;
+  securityLevel?: 'safe' | 'suspicious' | 'malicious';
+}
+
+const RecentConnections: React.FC = () => {
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [filteredConnections, setFilteredConnections] = useState<Connection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [connectionTypeFilter, setConnectionTypeFilter] = useState<string>('all');
+  const [stats, setStats] = useState({ total: 0, active: 0, blocked: 0, byType: {}, byProtocol: {} });
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  // Socket.io for real-time updates
+  const { isConnected, data: socketData } = useAllSocket();
+
+  // Calculate 15 minutes ago
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+  const fetchRecentConnections = async () => {
+    try {
+      setIsLoading(true);
+      const response = await connectionApi.getHistory({
+        startDate: fifteenMinutesAgo,
+        limit: 100 // Get more results to ensure we capture all recent connections
+      });
+
+      // Filter connections to only show those from the last 15 minutes
+      const recentConnections = (response.connections || []).filter(
+        (conn: Connection) => new Date(conn.startTime) >= new Date(fifteenMinutesAgo)
+      );
+
+      setConnections(recentConnections);
+      
+      // Calculate stats for recent connections
+      const recentStats = {
+        total: recentConnections.length,
+        active: recentConnections.filter((c: Connection) => c.status === 'active').length,
+        blocked: recentConnections.filter((c: Connection) => c.isBlocked).length,
+        byType: {},
+        byProtocol: {}
+      };
+      
+      setStats(recentStats);
+    } catch (error) {
+      console.error('Error fetching recent connections:', error);
+      toast.error('Failed to load recent connections');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentConnections();
+    // Set up interval to refresh every 30 seconds
+    const interval = setInterval(fetchRecentConnections, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update connections from socket
+  useEffect(() => {
+    if (socketData.connections) {
+      // Filter for recent connections only
+      const recentConnections = socketData.connections.filter(
+        (conn: Connection) => new Date(conn.startTime) >= new Date(fifteenMinutesAgo)
+      );
+      if (recentConnections.length > 0) {
+        setConnections(recentConnections);
+        setLastUpdated(new Date());
+      }
+    }
+
+    // Listen for scan completion events and refresh data
+    if (socketData.scanCompleted) {
+      console.log('🔍 Scan completed, refreshing recent connections data');
+      fetchRecentConnections();
+    }
+  }, [socketData]);
+
+  // Filter connections based on search and filters
+  useEffect(() => {
+    let filtered = connections;
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(conn =>
+        conn.remoteIP.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conn.connectionType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conn.processName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conn.domain?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conn.username?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(conn => conn.status === statusFilter);
+    }
+
+    // Connection type filter
+    if (connectionTypeFilter !== 'all') {
+      filtered = filtered.filter(conn => conn.connectionType === connectionTypeFilter);
+    }
+
+    setFilteredConnections(filtered);
+  }, [connections, searchTerm, statusFilter, connectionTypeFilter]);
+
+  const handleTerminateConnection = async (connectionId: string) => {
+    try {
+      await connectionApi.terminate(connectionId, {
+        force: false,
+        reason: 'Terminated from Recent Connections panel'
+      });
+      await fetchRecentConnections();
+    } catch (error) {
+      console.error('Failed to terminate connection:', error);
+    }
+  };
+
+  const handleBlockConnection = async (connectionId: string) => {
+    try {
+      await connectionApi.block(connectionId);
+      await fetchRecentConnections();
+    } catch (error) {
+      console.error('Failed to block connection:', error);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'text-green-600 bg-green-50';
+      case 'closed': return 'text-gray-600 bg-gray-50';
+      case 'blocked': return 'text-red-600 bg-red-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  const getConnectionTypeColor = (type: string) => {
+    switch (type) {
+      case 'RDP': return 'bg-blue-100 text-blue-800';
+      case 'SSH': return 'bg-green-100 text-green-800';
+      case 'VNC': return 'bg-purple-100 text-purple-800';
+      case 'TeamViewer': return 'bg-orange-100 text-orange-800';
+      case 'HTTP': return 'bg-cyan-100 text-cyan-800';
+      case 'HTTPS': return 'bg-indigo-100 text-indigo-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getSecurityLevelIcon = (level?: string) => {
+    switch (level) {
+      case 'safe': return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'suspicious': return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+      case 'malicious': return <XCircle className="w-4 h-4 text-red-500" />;
+      default: return <Globe className="w-4 h-4 text-gray-400" />;
+    }
+  };
+
+  const exportConnections = () => {
+    const csvContent = [
+      ['Timestamp', 'Remote IP', 'Port', 'Type', 'Status', 'Process', 'Username', 'Domain', 'Security Level'].join(','),
+      ...filteredConnections.map(conn => [
+        new Date(conn.startTime).toLocaleString(),
+        conn.remoteIP,
+        conn.remotePort,
+        conn.connectionType,
+        conn.status,
+        conn.processName || '',
+        conn.username || '',
+        conn.domain || '',
+        conn.securityLevel || 'unknown'
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recent-connections-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Clock className="w-8 h-8 text-blue-600" />
+            Recent Connections
+          </h1>
+          <p className="text-gray-600 mt-1">
+            New connections from the last 15 minutes
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-500">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </div>
+          <button
+            onClick={fetchRecentConnections}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Recent Connections</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            </div>
+            <Clock className="w-8 h-8 text-blue-600" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Active Connections</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
+            </div>
+            <Globe className="w-8 h-8 text-green-600" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Blocked Connections</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
+            </div>
+            <Ban className="w-8 h-8 text-red-600" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Suspicious Connections</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {connections.filter(c => c.isSuspicious).length}
+              </p>
+            </div>
+            <AlertTriangle className="w-8 h-8 text-orange-600" />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Search
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search IP, type, process, user..."
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+              <option value="blocked">Blocked</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Connection Type
+            </label>
+            <select
+              value={connectionTypeFilter}
+              onChange={(e) => setConnectionTypeFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Types</option>
+              <option value="RDP">RDP</option>
+              <option value="SSH">SSH</option>
+              <option value="VNC">VNC</option>
+              <option value="TeamViewer">TeamViewer</option>
+              <option value="HTTP">HTTP</option>
+              <option value="HTTPS">HTTPS</option>
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={exportConnections}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Connections Table */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Recent Connections ({filteredConnections.length})
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Showing connections from the last 15 minutes
+          </p>
+        </div>
+
+        {filteredConnections.length === 0 ? (
+          <div className="text-center py-12">
+            <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No recent connections found</p>
+            <p className="text-sm text-gray-400 mt-1">
+              New connections will appear here automatically
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Connection Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type & Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Process & User
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Security
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Timestamp
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredConnections.map((connection) => (
+                  <tr key={connection._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {connection.remoteIP}:{connection.remotePort}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Local: {connection.localPort} | {connection.protocol}
+                        </div>
+                        {connection.domain && (
+                          <div className="text-sm text-gray-500">
+                            Domain: {connection.domain}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        <span className={cn(
+                          "inline-flex px-2 py-1 text-xs font-semibold rounded-full",
+                          getConnectionTypeColor(connection.connectionType)
+                        )}>
+                          {connection.connectionType}
+                        </span>
+                        <div>
+                          <span className={cn(
+                            "inline-flex px-2 py-1 text-xs font-semibold rounded-full",
+                            getStatusColor(connection.status)
+                          )}>
+                            {connection.status}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm text-gray-900">
+                          {connection.processName || 'Unknown'}
+                        </div>
+                        {connection.username && (
+                          <div className="text-sm text-gray-500">
+                            User: {connection.username}
+                          </div>
+                        )}
+                        {connection.browserProcess && (
+                          <div className="text-sm text-gray-500">
+                            Browser: {connection.browserProcess}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        {getSecurityLevelIcon(connection.securityLevel)}
+                        <span className="text-sm text-gray-600 capitalize">
+                          {connection.securityLevel || 'Unknown'}
+                        </span>
+                        {connection.isSuspicious && (
+                          <AlertTriangle className="w-4 h-4 text-orange-500" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div>
+                        <div>{new Date(connection.startTime).toLocaleDateString()}</div>
+                        <div>{new Date(connection.startTime).toLocaleTimeString()}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        {connection.status === 'active' && (
+                          <>
+                            <button
+                              onClick={() => handleTerminateConnection(connection._id)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Terminate Connection"
+                            >
+                              <Ban className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleBlockConnection(connection._id)}
+                              className="text-orange-600 hover:text-orange-700"
+                              title="Block IP"
+                            >
+                              <Shield className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        <button
+                          className="text-blue-600 hover:text-blue-700"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default RecentConnections;

@@ -1,0 +1,11 @@
+# Python dependencies for Windows system monitoring
+psutil>=5.9.6
+pywin32>=307
+requests>=2.31.0
+websockets>=12.0
+aiohttp>=3.9.1
+asyncio-mqtt>=0.16.1
+scapy>=2.5.0
+netifaces>=0.11.0
+wmi>=1.5.1
+pyinstaller>=6.3.0
