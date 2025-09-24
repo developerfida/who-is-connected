@@ -27,7 +27,7 @@ interface AuthActions {
 
 type AuthStore = AuthState & AuthActions;
 
-const API_BASE_URL = 'http://localhost:3004/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 export const useAuthStore = create<AuthStore>()((set, get) => ({
       // Initial state

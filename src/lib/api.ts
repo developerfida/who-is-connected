@@ -2,7 +2,7 @@
  * API utilities for making authenticated requests
  */
 
-const API_BASE_URL = 'http://localhost:3004/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // Get token from localStorage or auth store
 const getAuthToken = (): string | null => {
