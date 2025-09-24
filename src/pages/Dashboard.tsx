@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { connectionApi, settingsApi, monitoringApi } from '@/lib/api';
 import { useAllSocket } from '@/hooks/useSocket';
+import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 interface Connection {
@@ -73,6 +74,7 @@ const Dashboard: React.FC = () => {
   
   // Socket.io for real-time updates
   const { isConnected, data: socketData } = useAllSocket();
+  const { theme } = useTheme();
 
   const fetchDashboardData = async (showRefreshLoader = false) => {
     try {
@@ -189,34 +191,34 @@ const Dashboard: React.FC = () => {
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'CRITICAL': return 'text-red-600 bg-red-50 border-red-200';
-      case 'HIGH': return 'text-orange-600 bg-orange-50 border-orange-200';
-      case 'MEDIUM': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'LOW': return 'text-blue-600 bg-blue-50 border-blue-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+      case 'CRITICAL': return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+      case 'HIGH': return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
+      case 'MEDIUM': return 'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
+      case 'LOW': return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+      default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
     }
   };
 
   const getConnectionTypeColor = (type: string) => {
     switch (type) {
-      case 'RDP': return 'bg-blue-100 text-blue-800';
-      case 'SSH': return 'bg-green-100 text-green-800';
-      case 'VNC': return 'bg-purple-100 text-purple-800';
-      case 'TeamViewer': return 'bg-orange-100 text-orange-800';
-      case 'HTTPS': return 'bg-emerald-100 text-emerald-800';
-      case 'HTTP': return 'bg-cyan-100 text-cyan-800';
-      case 'WEB': return 'bg-indigo-100 text-indigo-800';
-      case 'WebSocket': return 'bg-teal-100 text-teal-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'RDP': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+      case 'SSH': return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+      case 'VNC': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
+      case 'TeamViewer': return 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300';
+      case 'HTTPS': return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300';
+      case 'HTTP': return 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300';
+      case 'WEB': return 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300';
+      case 'WebSocket': return 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
     }
   };
 
   const getDirectionColor = (direction: string) => {
     switch (direction) {
-      case 'inbound': return 'bg-red-100 text-red-800';
-      case 'outbound': return 'bg-blue-100 text-blue-800';
-      case 'local': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-yellow-100 text-yellow-800';
+      case 'inbound': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+      case 'outbound': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+      case 'local': return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+      default: return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300';
     }
   };
 
@@ -231,31 +233,31 @@ const Dashboard: React.FC = () => {
 
   const getSecurityRiskColor = (risk: string) => {
     switch (risk) {
-      case 'HIGH': return 'bg-red-100 text-red-800 border-red-200';
-      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'LOW': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'HIGH': return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800';
+      case 'MEDIUM': return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800';
+      case 'LOW': return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700';
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto bg-gray-50 dark:bg-gray-900 min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
             <Shield className="w-8 h-8 text-blue-600" />
             Security Dashboard
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-gray-600 dark:text-gray-300 mt-1">
             Monitor and manage remote connections to your system
           </p>
         </div>
@@ -264,26 +266,26 @@ const Dashboard: React.FC = () => {
             {isConnected ? (
               <>
                 <Wifi className="w-4 h-4 text-green-500" />
-                <span className="text-green-600">Live</span>
+                <span className="text-green-600 dark:text-green-400">Live</span>
               </>
             ) : (
               <>
                 <WifiOff className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-500">Offline</span>
+                <span className="text-gray-500 dark:text-gray-400">Offline</span>
               </>
             )}
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
             Last updated: {lastUpdated.toLocaleTimeString()}
           </div>
           <div className="flex items-center gap-3">
             {scanMessage && (
               <div className={`text-sm px-3 py-1 rounded-md ${
                 scanMessage.includes('failed') || scanMessage.includes('Failed') 
-                  ? 'bg-red-50 text-red-700 border border-red-200' 
+                  ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' 
                   : scanMessage.includes('completed') 
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                  ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+                  : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
               }`}>
                 {scanMessage}
               </div>
@@ -318,51 +320,51 @@ const Dashboard: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Active Connections</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Connections</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.active}</p>
             </div>
             <Activity className="w-8 h-8 text-green-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Today's Connections</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.today}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Today's Connections</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.today}</p>
             </div>
             <Clock className="w-8 h-8 text-blue-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">This Week</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.week}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">This Week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.week}</p>
             </div>
             <Users className="w-8 h-8 text-purple-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Blocked</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Blocked</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.blocked}</p>
             </div>
             <Ban className="w-8 h-8 text-red-600" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Alerts</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.unacknowledgedAlerts}</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Alerts</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.unacknowledgedAlerts}</p>
             </div>
             <AlertTriangle className="w-8 h-8 text-orange-600" />
           </div>
@@ -371,13 +373,13 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Active Connections */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <Globe className="w-5 h-5 text-blue-600" />
               Network Connections
             </h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Remote access and web browsing activity
             </p>
           </div>
@@ -385,12 +387,12 @@ const Dashboard: React.FC = () => {
             {connections.length === 0 ? (
               <div className="text-center py-8">
                 <Globe className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No active remote connections</p>
+                <p className="text-gray-500 dark:text-gray-400">No active remote connections</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {connections.map((connection) => (
-                  <div key={connection._id} className="border border-gray-200 rounded-lg p-4">
+                  <div key={connection._id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-3">
                         <span className={cn(
@@ -408,11 +410,11 @@ const Dashboard: React.FC = () => {
                             {connection.direction}
                           </span>
                         )}
-                        <span className="font-medium text-gray-900">
+                        <span className="font-medium text-gray-900 dark:text-white">
                           {connection.domain || `${connection.remoteIP}:${connection.remotePort}`}
                         </span>
                         {connection.isSuspicious && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 flex items-center gap-1">
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3" />
                             Suspicious
                           </span>
@@ -429,24 +431,24 @@ const Dashboard: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleTerminateConnection(connection._id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                          className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
                           title="Terminate Connection"
                         >
                           <Ban className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleBlockConnection(connection._id)}
-                          className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                          className="p-1 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded"
                           title="Block IP"
                         >
                           <Shield className="w-4 h-4" />
                         </button>
-                        <button className="p-1 text-gray-600 hover:bg-gray-50 rounded">
+                        <button className="p-1 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded">
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <div className="text-sm text-gray-600 space-y-1">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                       <div>Remote: {connection.remoteIP}:{connection.remotePort}</div>
                       <div>Local Port: {connection.localPort}</div>
                       <div>Protocol: {connection.protocol}</div>
@@ -472,9 +474,9 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Security Alerts */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-orange-600" />
               Security Alerts
             </h2>
@@ -483,7 +485,7 @@ const Dashboard: React.FC = () => {
             {alerts.length === 0 ? (
               <div className="text-center py-8">
                 <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No active security alerts</p>
+                <p className="text-gray-500 dark:text-gray-400">No active security alerts</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -500,17 +502,17 @@ const Dashboard: React.FC = () => {
                         )}>
                           {alert.severity}
                         </span>
-                        <span className="font-medium">{alert.alertType.replace('_', ' ')}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{alert.alertType.replace('_', ' ')}</span>
                       </div>
                       <button
                         onClick={() => handleAcknowledgeAlert(alert._id)}
-                        className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                        className="text-xs px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
                       >
                         Acknowledge
                       </button>
                     </div>
-                    <p className="text-sm mb-2">{alert.message}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm mb-2 text-gray-900 dark:text-white">{alert.message}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       {new Date(alert.createdAt).toLocaleString()}
                     </p>
                   </div>
