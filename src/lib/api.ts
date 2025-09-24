@@ -214,6 +214,23 @@ export const authApi = {
   verifyToken: () => apiCall('/auth/verify'),
 };
 
+// GeoIP API
+export const geoipApi = {
+  lookup: (ip: string) => apiCall(`/geoip/lookup/${ip}`),
+  bulkLookup: (ips: string[]) => apiCall('/geoip/bulk-lookup', {
+    method: 'POST',
+    body: JSON.stringify({ ips }),
+  }),
+  updateConnections: () => apiCall('/geoip/update-connections', {
+    method: 'POST',
+  }),
+  getStats: () => apiCall('/geoip/stats'),
+  clearCache: () => apiCall('/geoip/cache', {
+    method: 'DELETE',
+  }),
+  getSuspiciousConnections: () => apiCall('/geoip/suspicious'),
+};
+
 // Export utility functions
 export { authenticatedFetch, apiCall };
 export default {
@@ -221,4 +238,5 @@ export default {
   settings: settingsApi,
   monitoring: monitoringApi,
   auth: authApi,
+  geoip: geoipApi,
 };

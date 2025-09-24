@@ -10,6 +10,22 @@ import { broadcastNewConnection, broadcastSecurityAlert, broadcastConnectionTerm
 const router = Router();
 
 // Validation schemas
+const geoLocationSchema = Joi.object({
+  country: Joi.string().allow(''),
+  countryCode: Joi.string().allow(''),
+  city: Joi.string().allow(''),
+  region: Joi.string().allow(''),
+  regionName: Joi.string().allow(''),
+  isp: Joi.string().allow(''),
+  org: Joi.string().allow(''),
+  asn: Joi.string().allow(''),
+  timezone: Joi.string().allow(''),
+  lat: Joi.number(),
+  lon: Joi.number(),
+  query: Joi.string().allow(''),
+  status: Joi.string().allow('')
+});
+
 const newConnectionSchema = Joi.object({
   local_ip: Joi.string().ip(),
   local_port: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
@@ -20,7 +36,8 @@ const newConnectionSchema = Joi.object({
   process_name: Joi.string().allow(''),
   pid: Joi.number().integer().min(0),
   username: Joi.string().allow(''),
-  timestamp: Joi.string().isoDate().required()
+  timestamp: Joi.string().isoDate().required(),
+  geoLocation: geoLocationSchema.optional()
 });
 
 const systemInfoSchema = Joi.object({
@@ -115,7 +132,8 @@ router.post('/connections/new', authenticatePythonService, async (req: Request, 
       username: value.username || undefined,
       startTime: new Date(value.timestamp),
       status: 'active',
-      isBlocked: false
+      isBlocked: false,
+      geoLocation: value.geoLocation || undefined
     });
 
     await connectionLog.save();

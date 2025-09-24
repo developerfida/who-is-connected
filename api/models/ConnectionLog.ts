@@ -1,5 +1,21 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface IGeoLocation {
+  country?: string;
+  countryCode?: string;
+  city?: string;
+  region?: string;
+  regionName?: string;
+  isp?: string;
+  org?: string;
+  asn?: string;
+  timezone?: string;
+  lat?: number;
+  lon?: number;
+  query?: string; // the IP that was queried
+  status?: string; // success/fail from API
+}
+
 export interface IConnectionLog extends Document {
   userId: mongoose.Types.ObjectId;
   remoteIP: string;
@@ -13,6 +29,7 @@ export interface IConnectionLog extends Document {
   processName?: string;
   processId?: number;
   username?: string; // remote user
+  geoLocation?: IGeoLocation; // GeoIP information
   isSuspicious?: boolean;
   securityRisk?: 'LOW' | 'MEDIUM' | 'HIGH';
   startTime: Date;
@@ -94,6 +111,21 @@ const connectionLogSchema = new Schema<IConnectionLog>({
     type: String,
     trim: true
   },
+  geoLocation: {
+    country: { type: String, trim: true },
+    countryCode: { type: String, trim: true, uppercase: true },
+    city: { type: String, trim: true },
+    region: { type: String, trim: true },
+    regionName: { type: String, trim: true },
+    isp: { type: String, trim: true },
+    org: { type: String, trim: true },
+    asn: { type: String, trim: true },
+    timezone: { type: String, trim: true },
+    lat: { type: Number },
+    lon: { type: Number },
+    query: { type: String, trim: true },
+    status: { type: String, trim: true }
+  },
   startTime: {
     type: Date,
     default: Date.now,
@@ -130,5 +162,9 @@ connectionLogSchema.index({ browserProcess: 1 });
 connectionLogSchema.index({ isSuspicious: 1 });
 connectionLogSchema.index({ securityRisk: 1 });
 connectionLogSchema.index({ isSuspicious: 1, securityRisk: 1 });
+connectionLogSchema.index({ 'geoLocation.countryCode': 1 });
+connectionLogSchema.index({ 'geoLocation.country': 1 });
+connectionLogSchema.index({ 'geoLocation.city': 1 });
+connectionLogSchema.index({ 'geoLocation.isp': 1 });
 
 export const ConnectionLog = mongoose.model<IConnectionLog>('ConnectionLog', connectionLogSchema);

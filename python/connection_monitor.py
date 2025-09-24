@@ -75,6 +75,13 @@ class WindowsConnectionMonitor:
             r'\b(download|install|update|security|alert|warning)\b.*\.(exe|zip|rar)',
             r'\b(free|crack|keygen|serial|patch)\b'
         ]
+        
+        # GeoIP cache and settings
+        self.geoip_cache = {}
+        self.geoip_cache_ttl = 24 * 60 * 60  # 24 hours in seconds
+        self.geoip_api_url = 'http://ip-api.com/json'
+        self.last_geoip_request = 0
+        self.geoip_rate_limit = 1.0  # 1 second between requests
     
     def get_network_connections(self) -> List[Dict]:
         """Get all network connections using psutil"""
@@ -93,6 +100,9 @@ class WindowsConnectionMonitor:
                         process_name = self._get_process_name(conn.pid)
                         domain = self._extract_domain(conn.raddr.ip) if direction == 'outbound' else None
                         
+                        # Perform GeoIP lookup for the remote IP
+                        geo_data = self.lookup_geoip(conn.raddr.ip)
+                        
                         # Create connection info with only fields expected by backend API
                         connection_info = {
                             'local_ip': conn.laddr.ip if conn.laddr else '0.0.0.0',
@@ -106,6 +116,11 @@ class WindowsConnectionMonitor:
                             'username': self._get_connection_user(conn.pid) or '',
                             'timestamp': datetime.now().isoformat()
                         }
+                        
+                        # Add GeoIP data if available
+                        if geo_data:
+                            connection_info['geoLocation'] = geo_data
+                        
                         connections.append(connection_info)
         
         except Exception as e:
@@ -501,6 +516,135 @@ class WindowsConnectionMonitor:
             logger.error(f"Error blocking IP {ip_address}: {e}")
             return False
     
+    def _is_private_ip(self, ip: str) -> bool:
+        """Check if IP is private/local and should not be looked up"""
+        try:
+            parts = [int(x) for x in ip.split('.')]
+            if len(parts) != 4 or any(part < 0 or part > 255 for part in parts):
+                return True  # Invalid IP, treat as private
+            
+            # Private IP ranges:
+            # 10.0.0.0 - 10.255.255.255
+            # 172.16.0.0 - 172.31.255.255
+            # 192.168.0.0 - 192.168.255.255
+            # 127.0.0.0 - 127.255.255.255 (loopback)
+            return (
+                parts[0] == 10 or
+                parts[0] == 127 or
+                (parts[0] == 172 and 16 <= parts[1] <= 31) or
+                (parts[0] == 192 and parts[1] == 168)
+            )
+        except (ValueError, IndexError):
+            return True  # Invalid IP format, treat as private
+    
+    def _clean_geoip_cache(self):
+        """Clean expired GeoIP cache entries"""
+        current_time = time.time()
+        expired_keys = []
+        
+        for ip, data in self.geoip_cache.items():
+            if current_time - data.get('timestamp', 0) > self.geoip_cache_ttl:
+                expired_keys.append(ip)
+        
+        for key in expired_keys:
+            del self.geoip_cache[key]
+    
+    def lookup_geoip(self, ip: str) -> Optional[Dict]:
+        """Lookup GeoIP information for an IP address"""
+        try:
+            logger.debug(f"Starting GeoIP lookup for {ip}")
+            
+            # Clean cache periodically
+            self._clean_geoip_cache()
+            
+            # Check if IP is private/local
+            if self._is_private_ip(ip):
+                logger.debug(f"IP {ip} is private/local, returning local data")
+                return {
+                    'country': 'Local',
+                    'countryCode': 'LOCAL',
+                    'city': 'Local Network',
+                    'region': 'N/A',
+                    'regionName': 'Local Network',
+                    'isp': 'Local Network',
+                    'org': 'Private Network',
+                    'asn': 'N/A',
+                    'query': ip,
+                    'status': 'private'
+                }
+            
+            # Check cache first
+            if ip in self.geoip_cache:
+                cached_data = self.geoip_cache[ip]
+                if time.time() - cached_data.get('timestamp', 0) < self.geoip_cache_ttl:
+                    logger.debug(f"Returning cached GeoIP data for {ip}")
+                    return cached_data.get('data')
+            
+            # Rate limiting
+            current_time = time.time()
+            time_since_last = current_time - self.last_geoip_request
+            if time_since_last < self.geoip_rate_limit:
+                time.sleep(self.geoip_rate_limit - time_since_last)
+            
+            self.last_geoip_request = time.time()
+            
+            # Make API request
+            url = f"{self.geoip_api_url}/{ip}?fields=status,message,country,countryCode,region,regionName,city,lat,lon,timezone,isp,org,as,query"
+            logger.info(f"Making GeoIP API request for {ip}: {url}")
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.debug(f"GeoIP API response for {ip}: {data}")
+            
+            # Check if API returned success
+            if data.get('status') != 'success':
+                logger.warning(f"GeoIP lookup failed for {ip}: {data.get('message', 'Unknown error')}")
+                return None
+            
+            # Transform API response to our format
+            geo_data = {
+                'country': data.get('country', 'Unknown'),
+                'countryCode': data.get('countryCode', 'XX'),
+                'city': data.get('city', 'Unknown'),
+                'region': data.get('region', 'Unknown'),
+                'regionName': data.get('regionName', 'Unknown'),
+                'isp': data.get('isp', 'Unknown'),
+                'org': data.get('org', 'Unknown'),
+                'asn': data.get('as', 'Unknown'),
+                'timezone': data.get('timezone', 'Unknown'),
+                'lat': data.get('lat', 0),
+                'lon': data.get('lon', 0),
+                'query': data.get('query', ip),
+                'status': 'success'
+            }
+            
+            # Cache the result
+            self.geoip_cache[ip] = {
+                'data': geo_data,
+                'timestamp': time.time()
+            }
+            
+            logger.info(f"Successfully looked up GeoIP for {ip}: {geo_data.get('country', 'Unknown')}, {geo_data.get('city', 'Unknown')}")
+            return geo_data
+            
+        except Exception as e:
+            logger.error(f"Error looking up GeoIP for {ip}: {e}")
+            return None
+    
+    def _is_suspicious_country(self, country_code: str) -> bool:
+        """Check if a country is considered suspicious"""
+        suspicious_countries = [
+            'CN',  # China
+            'RU',  # Russia
+            'KP',  # North Korea
+            'IR',  # Iran
+            'SY',  # Syria
+            'CU',  # Cuba
+            'SD',  # Sudan
+        ]
+        return country_code and country_code.upper() in suspicious_countries
+    
     def send_to_api(self, endpoint: str, data: Dict) -> bool:
         """Send data to the Node.js API"""
         try:
@@ -628,6 +772,19 @@ class WindowsConnectionMonitor:
                         'message': f'Non-RDP connection on port 3389 from {conn["remote_ip"]}'
                     }
                     self.send_to_api('security/alert', alert_data)
+            
+            # Check for connections from suspicious countries
+            for conn in connections:
+                geo_data = conn.get('geoLocation')
+                if geo_data and geo_data.get('countryCode'):
+                    country_code = geo_data.get('countryCode')
+                    if self._is_suspicious_country(country_code):
+                        alert_data = {
+                            'alert_type': 'SUSPICIOUS_COUNTRY',
+                            'severity': 'HIGH',
+                            'message': f'Connection from suspicious country {geo_data.get("country", "Unknown")} ({country_code}) detected from {conn["remote_ip"]}'
+                        }
+                        self.send_to_api('security/alert', alert_data)
         
         except Exception as e:
              logger.error(f"Error checking security alerts: {e}")

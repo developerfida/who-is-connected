@@ -18,6 +18,8 @@ import { Link } from 'react-router-dom';
 import { connectionApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+import { GeoLocation, getCountryFlag, formatLocation, formatISP, getCountryRiskLevel, getRiskBgColor } from '../utils/geoip';
+
 interface Connection {
   _id: string;
   remoteIP: string;
@@ -36,6 +38,7 @@ interface Connection {
   endTime?: string;
   status: string;
   isBlocked: boolean;
+  geoLocation?: GeoLocation;
   createdAt: string;
 }
 
@@ -46,6 +49,7 @@ interface Filters {
   status: string;
   startDate: string;
   endDate: string;
+  country: string;
 }
 
 const ConnectionHistory: React.FC = () => {
@@ -57,7 +61,8 @@ const ConnectionHistory: React.FC = () => {
     direction: '',
     status: '',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    country: ''
   });
   const [pagination, setPagination] = useState({
     page: 1,
@@ -82,6 +87,7 @@ const ConnectionHistory: React.FC = () => {
       if (filters.status) params.status = filters.status;
       if (filters.startDate) params.startDate = filters.startDate;
       if (filters.endDate) params.endDate = filters.endDate;
+      if (filters.country) params.country = filters.country;
 
       const data = await connectionApi.getHistory(params);
       setConnections(data.connections || []);
@@ -113,7 +119,8 @@ const ConnectionHistory: React.FC = () => {
       direction: '',
       status: '',
       startDate: '',
-      endDate: ''
+      endDate: '',
+      country: ''
     });
     setPagination(prev => ({ ...prev, page: 1 }));
     fetchConnections(1);
@@ -323,6 +330,33 @@ const ConnectionHistory: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Country
+              </label>
+              <select
+                value={filters.country}
+                onChange={(e) => handleFilterChange('country', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Countries</option>
+                <option value="US">🇺🇸 United States</option>
+                <option value="CN">🇨🇳 China</option>
+                <option value="RU">🇷🇺 Russia</option>
+                <option value="DE">🇩🇪 Germany</option>
+                <option value="GB">🇬🇧 United Kingdom</option>
+                <option value="FR">🇫🇷 France</option>
+                <option value="JP">🇯🇵 Japan</option>
+                <option value="IN">🇮🇳 India</option>
+                <option value="BR">🇧🇷 Brazil</option>
+                <option value="CA">🇨🇦 Canada</option>
+                <option value="AU">🇦🇺 Australia</option>
+                <option value="KR">🇰🇷 South Korea</option>
+                <option value="NL">🇳🇱 Netherlands</option>
+                <option value="IT">🇮🇹 Italy</option>
+                <option value="ES">🇪🇸 Spain</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Start Date
               </label>
               <input
@@ -387,6 +421,9 @@ const ConnectionHistory: React.FC = () => {
                     Connection
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Type & Protocol
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -433,6 +470,33 @@ const ConnectionHistory: React.FC = () => {
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {connection.geoLocation ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{getCountryFlag(connection.geoLocation.countryCode)}</span>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {formatLocation(connection.geoLocation)}
+                            </div>
+                            {connection.geoLocation.isp && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {formatISP(connection.geoLocation)}
+                              </div>
+                            )}
+                            {getCountryRiskLevel(connection.geoLocation.countryCode) !== 'low' && (
+                              <span className={cn(
+                                "inline-flex px-1.5 py-0.5 text-xs font-medium rounded mt-1",
+                                getRiskBgColor(getCountryRiskLevel(connection.geoLocation.countryCode))
+                              )}>
+                                {getCountryRiskLevel(connection.geoLocation.countryCode)} risk
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 dark:text-gray-500">Unknown</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="space-y-1">

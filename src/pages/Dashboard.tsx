@@ -20,6 +20,8 @@ import { useAllSocket } from '@/hooks/useSocket';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
+import { GeoLocation, getCountryFlag, formatLocation, formatISP, getCountryRiskLevel, getRiskBgColor } from '../utils/geoip';
+
 interface Connection {
   _id: string;
   remoteIP: string;
@@ -37,6 +39,7 @@ interface Connection {
   startTime: string;
   status: string;
   isBlocked: boolean;
+  geoLocation?: GeoLocation;
 }
 
 interface SecurityAlert {
@@ -449,9 +452,30 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                      <div>Remote: {connection.remoteIP}:{connection.remotePort}</div>
+                      <div className="flex items-center gap-2">
+                        <span>Remote: {connection.remoteIP}:{connection.remotePort}</span>
+                        {connection.geoLocation && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{getCountryFlag(connection.geoLocation.countryCode)}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatLocation(connection.geoLocation)}
+                            </span>
+                            {getCountryRiskLevel(connection.geoLocation.countryCode) !== 'low' && (
+                              <span className={cn(
+                                "px-1.5 py-0.5 rounded text-xs font-medium",
+                                getRiskBgColor(getCountryRiskLevel(connection.geoLocation.countryCode))
+                              )}>
+                                {getCountryRiskLevel(connection.geoLocation.countryCode)} risk
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div>Local Port: {connection.localPort}</div>
                       <div>Protocol: {connection.protocol}</div>
+                      {connection.geoLocation?.isp && (
+                        <div>ISP: {formatISP(connection.geoLocation)}</div>
+                      )}
                       {connection.domain && (
                         <div>Domain: {connection.domain}</div>
                       )}

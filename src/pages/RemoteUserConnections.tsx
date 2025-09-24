@@ -19,6 +19,8 @@ import { useAllSocket } from '@/hooks/useSocket';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+import { GeoLocation, getCountryFlag, formatLocation, formatISP, getCountryRiskLevel, getRiskBgColor } from '../utils/geoip';
+
 interface Connection {
   _id: string;
   remoteIP: string;
@@ -37,7 +39,8 @@ interface Connection {
   domain?: string;
   browserProcess?: string;
   isSuspicious?: boolean;
-  securityLevel?: 'safe' | 'suspicious' | 'malicious';
+  securityRisk?: string;
+  geoLocation?: GeoLocation;
 }
 
 const RemoteUserConnections: React.FC = () => {
@@ -243,7 +246,7 @@ const RemoteUserConnections: React.FC = () => {
         conn.status,
         conn.processName || '',
         conn.domain || '',
-        conn.securityLevel || 'unknown'
+        conn.securityRisk || 'unknown'
       ].join(','))
     ].join('\n');
 
@@ -369,7 +372,7 @@ const RemoteUserConnections: React.FC = () => {
                     {connection.connectionType}
                   </span>
                   <div className="flex items-center gap-1">
-                    {getSecurityLevelIcon(connection.securityLevel)}
+                    {getSecurityLevelIcon(connection.securityRisk)}
                     {connection.isSuspicious && (
                       <AlertTriangle className="w-4 h-4 text-orange-500" />
                     )}
@@ -377,9 +380,29 @@ const RemoteUserConnections: React.FC = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">
-                    {connection.remoteIP}:{connection.remotePort}
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                      {connection.remoteIP}:{connection.remotePort}
+                    </div>
+                    {connection.geoLocation && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm">{getCountryFlag(connection.geoLocation.countryCode)}</span>
+                        {getCountryRiskLevel(connection.geoLocation.countryCode) !== 'low' && (
+                          <span className={cn(
+                            "px-1 py-0.5 text-xs font-medium rounded",
+                            getRiskBgColor(getCountryRiskLevel(connection.geoLocation.countryCode))
+                          )}>
+                            {getCountryRiskLevel(connection.geoLocation.countryCode)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  {connection.geoLocation && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      📍 {formatLocation(connection.geoLocation)}
+                    </div>
+                  )}
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     Local: {connection.localPort} | {connection.protocol}
                   </div>
@@ -506,6 +529,9 @@ const RemoteUserConnections: React.FC = () => {
                     Connection Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Type & Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -537,6 +563,33 @@ const RemoteUserConnections: React.FC = () => {
                           User: {connection.username}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {connection.geoLocation ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{getCountryFlag(connection.geoLocation.countryCode)}</span>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {formatLocation(connection.geoLocation)}
+                            </div>
+                            {connection.geoLocation.isp && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {formatISP(connection.geoLocation)}
+                              </div>
+                            )}
+                            {getCountryRiskLevel(connection.geoLocation.countryCode) !== 'low' && (
+                              <span className={cn(
+                                "inline-flex px-1.5 py-0.5 text-xs font-medium rounded mt-1",
+                                getRiskBgColor(getCountryRiskLevel(connection.geoLocation.countryCode))
+                              )}>
+                                {getCountryRiskLevel(connection.geoLocation.countryCode)} risk
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 dark:text-gray-500">Unknown</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="space-y-1">
@@ -575,9 +628,9 @@ const RemoteUserConnections: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        {getSecurityLevelIcon(connection.securityLevel)}
+                        {getSecurityLevelIcon(connection.securityRisk)}
                         <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">
-                          {connection.securityLevel || 'Unknown'}
+                          {connection.securityRisk || 'Unknown'}
                         </span>
                         {connection.isSuspicious && (
                           <AlertTriangle className="w-4 h-4 text-orange-500" />

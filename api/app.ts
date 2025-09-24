@@ -20,6 +20,7 @@ import connectionsRoutes from './routes/connections.js';
 import settingsRoutes from './routes/settings.js';
 import monitoringRoutes from './routes/monitoring.js';
 import pythonIntegrationRoutes from './routes/python-integration.js';
+import geoipRoutes from './routes/geoip.js';
 
 // Import database connection
 import { connectDatabase } from './config/database.js';
@@ -81,6 +82,7 @@ app.use('/api/connections', connectionsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/python', pythonIntegrationRoutes);
+app.use('/api/geoip', geoipRoutes);
 
 /**
  * health
