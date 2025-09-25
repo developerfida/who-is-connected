@@ -260,10 +260,36 @@ router.post('/security/alert', authenticatePythonService, async (req: Request, r
   try {
     const { alert_type, severity, message, connection_id } = req.body;
 
+    // Enhanced logging for debugging
+    console.log('🚨 Received security alert from Python service:', {
+      alert_type,
+      severity,
+      message: message?.substring(0, 100) + (message?.length > 100 ? '...' : ''),
+      connection_id,
+      timestamp: new Date().toISOString()
+    });
+
     if (!alert_type || !severity || !message) {
+      console.error('❌ Security alert validation failed:', {
+        alert_type: !!alert_type,
+        severity: !!severity,
+        message: !!message,
+        receivedBody: req.body
+      });
       res.status(400).json({
         success: false,
         message: 'Missing required fields: alert_type, severity, message'
+      });
+      return;
+    }
+
+    // Validate severity level
+    const validSeverities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    if (!validSeverities.includes(severity.toUpperCase())) {
+      console.error('❌ Invalid severity level:', { severity, validSeverities });
+      res.status(400).json({
+        success: false,
+        message: `Invalid severity level. Must be one of: ${validSeverities.join(', ')}`
       });
       return;
     }
@@ -272,15 +298,30 @@ router.post('/security/alert', authenticatePythonService, async (req: Request, r
     const alert = new SecurityAlert({
       connectionId: connection_id || undefined,
       alertType: alert_type,
-      severity: severity,
+      severity: severity.toUpperCase(),
       message: message,
       acknowledged: false
     });
 
     await alert.save();
+    console.log('✅ Security alert saved to database:', {
+      alertId: alert._id,
+      alertType: alert.alertType,
+      severity: alert.severity,
+      timestamp: alert.createdAt
+    });
 
     // Broadcast to WebSocket clients
-    broadcastSecurityAlert(alert);
+    try {
+      broadcastSecurityAlert(alert);
+      console.log('📡 Security alert broadcasted via WebSocket:', {
+        alertId: alert._id,
+        severity: alert.severity
+      });
+    } catch (broadcastError) {
+      console.error('❌ Failed to broadcast security alert:', broadcastError);
+      // Don't fail the request if broadcast fails
+    }
 
     res.json({
       success: true,
@@ -288,7 +329,11 @@ router.post('/security/alert', authenticatePythonService, async (req: Request, r
       alertId: alert._id
     });
   } catch (error) {
-    console.error('Error processing security alert:', error);
+    console.error('❌ Error processing security alert:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      requestBody: req.body
+    });
     res.status(500).json({
       success: false,
       message: 'Internal server error while processing security alert'

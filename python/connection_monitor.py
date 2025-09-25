@@ -632,18 +632,42 @@ class WindowsConnectionMonitor:
             logger.error(f"Error looking up GeoIP for {ip}: {e}")
             return None
     
-    def _is_suspicious_country(self, country_code: str) -> bool:
-        """Check if a country is considered suspicious"""
-        suspicious_countries = [
-            'CN',  # China
-            'RU',  # Russia
+    def _is_suspicious_country(self, country_code: str) -> str:
+        """Check if a country is considered suspicious and return risk level"""
+        if not country_code:
+            return 'none'
+            
+        country_upper = country_code.upper()
+        
+        # CRITICAL risk countries (known for state-sponsored attacks)
+        critical_countries = [
             'KP',  # North Korea
             'IR',  # Iran
             'SY',  # Syria
+        ]
+        
+        # HIGH risk countries (frequent source of attacks)
+        high_risk_countries = [
+            'CN',  # China
+            'RU',  # Russia
             'CU',  # Cuba
             'SD',  # Sudan
+            'AF',  # Afghanistan
+            'IQ',  # Iraq
+            'LY',  # Libya
+            'SO',  # Somalia
+            'YE',  # Yemen
+            'MM',  # Myanmar
+            'BY',  # Belarus
+            'VE',  # Venezuela
         ]
-        return country_code and country_code.upper() in suspicious_countries
+        
+        if country_upper in critical_countries:
+            return 'critical'
+        elif country_upper in high_risk_countries:
+            return 'high'
+        else:
+            return 'none'
     
     def send_to_api(self, endpoint: str, data: Dict) -> bool:
         """Send data to the Node.js API"""
@@ -656,14 +680,25 @@ class WindowsConnectionMonitor:
                 'X-API-Key': 'python-monitor-key-change-in-production'  # Should match backend
             }
             
+            # Enhanced logging for security alerts
+            if endpoint == 'security/alert':
+                logger.info(f"🚨 Sending security alert to API: {data.get('alert_type')} - {data.get('severity')} - {data.get('message', '')[:100]}...")
+            
             response = requests.post(url, json=data, headers=headers, timeout=10)
             response.raise_for_status()
             
-            logger.info(f"Successfully sent data to {endpoint}")
+            if endpoint == 'security/alert':
+                logger.info(f"✅ Security alert sent successfully: {data.get('alert_type')} ({data.get('severity')})")
+            else:
+                logger.info(f"Successfully sent data to {endpoint}")
             return True
         
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to send data to API {endpoint}: {e}")
+            if endpoint == 'security/alert':
+                logger.error(f"❌ Failed to send security alert to API {endpoint}: {e}")
+                logger.error(f"Alert data: {data}")
+            else:
+                logger.error(f"Failed to send data to API {endpoint}: {e}")
             return False
     
     async def monitor_loop(self):
@@ -738,29 +773,58 @@ class WindowsConnectionMonitor:
     async def check_and_send_security_alerts(self, connections: List[Dict]) -> None:
         """Check for suspicious activity and send security alerts"""
         try:
-            # Check for multiple connections from same IP
-            ip_counts = {}
+            current_time = time.time()
+            
+            # Track connection attempts per IP with timestamps
+            ip_attempts = {}
             for conn in connections:
                 ip = conn['remote_ip']
-                ip_counts[ip] = ip_counts.get(ip, 0) + 1
+                if ip not in ip_attempts:
+                    ip_attempts[ip] = []
+                ip_attempts[ip].append(current_time)
             
-            for ip, count in ip_counts.items():
-                if count > 3:  # More than 3 connections from same IP
+            # Check for multiple connection attempts in the last 5 minutes
+            five_minutes_ago = current_time - 300  # 5 minutes in seconds
+            
+            for ip, timestamps in ip_attempts.items():
+                # Filter timestamps to last 5 minutes
+                recent_attempts = [t for t in timestamps if t >= five_minutes_ago]
+                
+                if len(recent_attempts) >= 6:  # 6+ attempts - CRITICAL severity
+                    alert_data = {
+                        'alert_type': 'MULTIPLE_ATTEMPTS',
+                        'severity': 'CRITICAL',
+                        'message': f'CRITICAL: Multiple connection attempts ({len(recent_attempts)}) from {ip} in the last 5 minutes - Possible brute force attack'
+                    }
+                    logger.critical(f"🔥 CRITICAL SECURITY ALERT: {alert_data['message']}")
+                    self.send_to_api('security/alert', alert_data)
+                elif len(recent_attempts) >= 4:  # 4-5 attempts - HIGH severity
                     alert_data = {
                         'alert_type': 'MULTIPLE_ATTEMPTS',
                         'severity': 'HIGH',
-                        'message': f'Multiple connections ({count}) detected from IP {ip}'
+                        'message': f'Multiple connection attempts ({len(recent_attempts)}) from {ip} in the last 5 minutes'
                     }
+                    logger.warning(f"🚨 HIGH SECURITY ALERT: {alert_data['message']}")
+                    self.send_to_api('security/alert', alert_data)
+                elif len(recent_attempts) >= 2:  # 2-3 attempts - MEDIUM severity
+                    alert_data = {
+                        'alert_type': 'MULTIPLE_ATTEMPTS',
+                        'severity': 'MEDIUM',
+                        'message': f'Multiple connection attempts ({len(recent_attempts)}) from {ip} detected'
+                    }
+                    logger.info(f"⚠️  Security notice: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
             
-            # Check for connections on unusual ports
+            # Check for connections on suspicious ports
+            suspicious_ports = [1234, 4444, 5555, 6666, 7777, 8888, 9999, 31337, 12345, 54321]
             for conn in connections:
-                if conn['remote_port'] in [1234, 4444, 5555, 6666, 7777, 8888, 9999]:
+                if conn['remote_port'] in suspicious_ports:
                     alert_data = {
-                        'alert_type': 'SUSPICIOUS_IP',
+                        'alert_type': 'SUSPICIOUS_PORT',
                         'severity': 'MEDIUM',
-                        'message': f'Connection from unusual port {conn["remote_port"]} detected from {conn["remote_ip"]}'
+                        'message': f'Connection from suspicious port {conn["remote_port"]} detected from {conn["remote_ip"]}'
                     }
+                    logger.warning(f"🚨 Suspicious port alert: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
             
             # Check for non-standard protocols on standard ports
@@ -769,8 +833,19 @@ class WindowsConnectionMonitor:
                     alert_data = {
                         'alert_type': 'UNUSUAL_ACTIVITY',
                         'severity': 'MEDIUM',
-                        'message': f'Non-RDP connection on port 3389 from {conn["remote_ip"]}'
+                        'message': f'Non-RDP connection on RDP port 3389 from {conn["remote_ip"]} (Type: {conn["connection_type"]})'
                     }
+                    logger.warning(f"🚨 Unusual activity: {alert_data['message']}")
+                    self.send_to_api('security/alert', alert_data)
+                
+                # Check for SSH on non-standard ports
+                if conn['connection_type'] == 'SSH' and conn['local_port'] != '22':
+                    alert_data = {
+                        'alert_type': 'UNUSUAL_ACTIVITY',
+                        'severity': 'LOW',
+                        'message': f'SSH connection on non-standard port {conn["local_port"]} from {conn["remote_ip"]}'
+                    }
+                    logger.info(f"ℹ️  SSH on unusual port: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
             
             # Check for connections from suspicious countries
@@ -778,13 +853,32 @@ class WindowsConnectionMonitor:
                 geo_data = conn.get('geoLocation')
                 if geo_data and geo_data.get('countryCode'):
                     country_code = geo_data.get('countryCode')
-                    if self._is_suspicious_country(country_code):
+                    risk_level = self._is_suspicious_country(country_code)
+                    
+                    if risk_level == 'critical':
+                        alert_data = {
+                            'alert_type': 'SUSPICIOUS_COUNTRY',
+                            'severity': 'CRITICAL',
+                            'message': f'CRITICAL: Connection from high-threat country {geo_data.get("country", "Unknown")} ({country_code}) detected from {conn["remote_ip"]} - State-sponsored threat risk'
+                        }
+                        logger.critical(f"🔥 CRITICAL COUNTRY THREAT: {alert_data['message']}")
+                        self.send_to_api('security/alert', alert_data)
+                    elif risk_level == 'high':
                         alert_data = {
                             'alert_type': 'SUSPICIOUS_COUNTRY',
                             'severity': 'HIGH',
-                            'message': f'Connection from suspicious country {geo_data.get("country", "Unknown")} ({country_code}) detected from {conn["remote_ip"]}'
+                            'message': f'Connection from high-risk country {geo_data.get("country", "Unknown")} ({country_code}) detected from {conn["remote_ip"]}'
                         }
+                        logger.warning(f"🚨 HIGH RISK COUNTRY: {alert_data['message']}")
                         self.send_to_api('security/alert', alert_data)
+            
+            # Check for failed connection patterns (if we can detect them)
+            # This would require tracking connection states over time
+            
+            # Log summary of security check
+            total_connections = len(connections)
+            unique_ips = len(set(conn['remote_ip'] for conn in connections))
+            logger.debug(f"Security check completed: {total_connections} connections from {unique_ips} unique IPs")
         
         except Exception as e:
              logger.error(f"Error checking security alerts: {e}")

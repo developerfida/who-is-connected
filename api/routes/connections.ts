@@ -18,7 +18,9 @@ const historyQuerySchema = Joi.object({
   ipAddress: Joi.string().ip(),
   status: Joi.string().valid('active', 'closed', 'blocked'),
   connectionType: Joi.string().valid('RDP', 'SSH', 'VNC', 'TeamViewer', 'HTTP', 'HTTPS', 'WebSocket', 'Other'),
-  username: Joi.string().max(50)
+  username: Joi.string().max(50),
+  processName: Joi.string().max(100),
+  country: Joi.string().max(10)
 });
 
 const terminateSchema = Joi.object({
@@ -84,7 +86,7 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const { page, limit, startDate, endDate, ipAddress, status, connectionType, username } = value;
+    const { page, limit, startDate, endDate, ipAddress, status, connectionType, username, processName, country } = value;
     const userId = req.user?._id;
 
     // Build query
@@ -124,6 +126,8 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response): Pr
     if (ipAddress) query.remoteIP = ipAddress;
     if (status) query.status = status;
     if (connectionType) query.connectionType = connectionType;
+    if (processName) query.processName = { $regex: processName, $options: 'i' };
+    if (country) query['geoLocation.countryCode'] = country;
 
     // Get total count
     const total = await ConnectionLog.countDocuments(query);
@@ -170,7 +174,7 @@ router.get('/remote-user/:username', authenticate, requireAdmin, async (req: Aut
       return;
     }
 
-    const { page, limit, startDate, endDate, ipAddress, status, connectionType } = value;
+    const { page, limit, startDate, endDate, ipAddress, status, connectionType, processName, country } = value;
     const username = req.params.username;
 
     // Build query to filter by username directly in ConnectionLog
@@ -185,6 +189,8 @@ router.get('/remote-user/:username', authenticate, requireAdmin, async (req: Aut
     if (ipAddress) query.remoteIP = ipAddress;
     if (status) query.status = status;
     if (connectionType) query.connectionType = connectionType;
+    if (processName) query.processName = { $regex: processName, $options: 'i' };
+    if (country) query['geoLocation.countryCode'] = country;
 
     // Get total count
     const total = await ConnectionLog.countDocuments(query);

@@ -57,10 +57,11 @@ const SystemMonitor: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedAlerts, setSelectedAlerts] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
 
   const { isConnected, data: socketData } = useAllSocket();
 
-  const itemsPerPage = 20;
+  const maxAlerts = 1000;
 
   const fetchAlerts = async (showRefreshLoader = false) => {
     try {
@@ -69,23 +70,29 @@ const SystemMonitor: React.FC = () => {
       }
 
       const params: any = {
-        page: currentPage,
-        limit: itemsPerPage
+        page: 1,
+        limit: maxAlerts
       };
 
       if (severityFilter !== 'all') {
         params.severity = severityFilter.toUpperCase();
       }
 
+      // Only send acknowledged parameter if filtering by acknowledgment status
       if (acknowledgedFilter !== 'all') {
         params.acknowledged = acknowledgedFilter === 'acknowledged';
+      }
+      // Explicitly request all alerts when filter is 'all'
+      if (acknowledgedFilter === 'all') {
+        // Don't send acknowledged parameter to get all alerts
+        delete params.acknowledged;
       }
 
       const response = await settingsApi.getAlerts(params);
       setAlerts(response.alerts || []);
-      setTotalPages(Math.ceil((response.total || 0) / itemsPerPage));
+      setTotalPages(1); // Single page with up to 1000 results
       
-      // Calculate stats
+      // Calculate stats from all alerts (not just current page)
       const alertStats = (response.alerts || []).reduce((acc: AlertStats, alert: SecurityAlert) => {
         acc.total++;
         acc[alert.severity.toLowerCase() as keyof AlertStats]++;
@@ -102,6 +109,11 @@ const SystemMonitor: React.FC = () => {
         unacknowledged: 0
       });
       
+      // Use total from response if available (for accurate count when there are more than 1000 alerts)
+      if (response.total) {
+        alertStats.total = response.total;
+      }
+      
       setStats(alertStats);
       setLastUpdated(new Date());
     } catch (error) {
@@ -114,15 +126,16 @@ const SystemMonitor: React.FC = () => {
 
   useEffect(() => {
     fetchAlerts();
-  }, [currentPage, severityFilter, acknowledgedFilter, dateRange]);
+  }, [severityFilter, acknowledgedFilter, dateRange]); // Removed currentPage dependency since we're not using pagination
 
-  // Update data from socket
-  useEffect(() => {
-    if (socketData.alerts) {
-      setAlerts(socketData.alerts);
-      setLastUpdated(new Date());
-    }
-  }, [socketData]);
+  // Update data from socket - DISABLED for System Monitor to show complete history
+  // The WebSocket only sends recent alerts (10), but we want to show up to 1000 historical alerts
+  // useEffect(() => {
+  //   if (socketData.alerts) {
+  //     setAlerts(socketData.alerts);
+  //     setLastUpdated(new Date());
+  //   }
+  // }, [socketData]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity.toUpperCase()) {
@@ -172,6 +185,21 @@ const SystemMonitor: React.FC = () => {
     } catch (error) {
       console.error('Failed to bulk acknowledge alerts:', error);
     }
+  };
+
+  const toggleMessageExpansion = (alertId: string) => {
+    const newExpanded = new Set(expandedMessages);
+    if (newExpanded.has(alertId)) {
+      newExpanded.delete(alertId);
+    } else {
+      newExpanded.add(alertId);
+    }
+    setExpandedMessages(newExpanded);
+  };
+
+  const truncateMessage = (message: string, maxLength: number = 100) => {
+    if (message.length <= maxLength) return message;
+    return message.substring(0, maxLength) + '...';
   };
 
   const handleExportCSV = () => {
@@ -382,7 +410,7 @@ const SystemMonitor: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Security Alerts ({filteredAlerts.length})
+            Security Alerts ({filteredAlerts.length} of up to {maxAlerts} results)
           </h2>
         </div>
 
@@ -467,8 +495,30 @@ const SystemMonitor: React.FC = () => {
                         {alert.severity}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white max-w-md truncate">
-                      {alert.message}
+                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white max-w-md">
+                      <div className="flex flex-col">
+                        <div className={expandedMessages.has(alert._id) ? '' : 'truncate'}>
+                          {expandedMessages.has(alert._id) ? alert.message : truncateMessage(alert.message)}
+                        </div>
+                        {alert.message.length > 100 && (
+                          <button
+                            onClick={() => toggleMessageExpansion(alert._id)}
+                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs mt-1 text-left flex items-center gap-1 transition-colors"
+                          >
+                            {expandedMessages.has(alert._id) ? (
+                              <>
+                                <EyeOff className="w-3 h-3" />
+                                Show less
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-3 h-3" />
+                                Show more
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={cn(
@@ -499,29 +549,11 @@ const SystemMonitor: React.FC = () => {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Results Info */}
+        {filteredAlerts.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                Showing page {currentPage} of {totalPages}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  Next
-                </button>
-              </div>
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              Showing {filteredAlerts.length} security alerts (up to {maxAlerts} results displayed)
             </div>
           </div>
         )}

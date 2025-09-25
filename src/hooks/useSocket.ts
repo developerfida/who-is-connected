@@ -25,7 +25,7 @@ interface UseSocketReturn {
   emit: (event: string, data?: any) => void;
 }
 
-const SOCKET_URL = 'http://localhost:3004';
+const SOCKET_URL = 'http://localhost:3001';
 
 export const useSocket = (options: UseSocketOptions = {}): UseSocketReturn => {
   const { autoConnect = true, subscriptions = [] } = options;

@@ -167,6 +167,7 @@ export const settingsApi = {
     limit?: number;
     severity?: string;
     acknowledged?: boolean;
+    hours?: number;
   }) => {
     const searchParams = new URLSearchParams();
     if (params) {

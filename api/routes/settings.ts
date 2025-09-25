@@ -350,13 +350,26 @@ router.delete('/alert-configs/:alertType', authenticate, async (req: AuthRequest
 router.get('/alerts', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = parseInt(req.query.limit as string) || 1000; // Changed default from 20 to 1000
     const severity = req.query.severity as string;
     const acknowledged = req.query.acknowledged === 'true';
+    const hours = parseInt(req.query.hours as string); // New parameter for time-based filtering
 
     const query: any = {};
     if (severity) query.severity = severity;
-    if (req.query.acknowledged !== undefined) query.acknowledged = acknowledged;
+    
+    // Special handling for CRITICAL alerts with time-based filtering
+    if (severity === 'CRITICAL' && hours) {
+      // For CRITICAL alerts, show all alerts from the last X hours regardless of acknowledgment
+      const hoursAgo = new Date(Date.now() - (hours * 60 * 60 * 1000));
+      query.createdAt = { $gte: hoursAgo };
+      // Don't filter by acknowledged status for CRITICAL alerts within time window
+    } else {
+      // Only filter by acknowledged status if explicitly requested (not 'all')
+      if (req.query.acknowledged !== undefined && req.query.acknowledged !== 'all') {
+        query.acknowledged = acknowledged;
+      }
+    }
 
     const total = await SecurityAlert.countDocuments(query);
     const alerts = await SecurityAlert.find(query)
@@ -368,6 +381,7 @@ router.get('/alerts', authenticate, async (req: AuthRequest, res: Response): Pro
     res.json({
       success: true,
       alerts,
+      total, // Add total count at root level for frontend stats
       pagination: {
         page,
         limit,

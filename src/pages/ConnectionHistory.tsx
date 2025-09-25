@@ -50,6 +50,7 @@ interface Filters {
   startDate: string;
   endDate: string;
   country: string;
+  processName: string;
 }
 
 const ConnectionHistory: React.FC = () => {
@@ -62,7 +63,8 @@ const ConnectionHistory: React.FC = () => {
     status: '',
     startDate: '',
     endDate: '',
-    country: ''
+    country: '',
+    processName: ''
   });
   const [pagination, setPagination] = useState({
     page: 1,
@@ -88,6 +90,7 @@ const ConnectionHistory: React.FC = () => {
       if (filters.startDate) params.startDate = filters.startDate;
       if (filters.endDate) params.endDate = filters.endDate;
       if (filters.country) params.country = filters.country;
+      if (filters.processName) params.processName = filters.processName;
 
       const data = await connectionApi.getHistory(params);
       setConnections(data.connections || []);
@@ -120,7 +123,8 @@ const ConnectionHistory: React.FC = () => {
       status: '',
       startDate: '',
       endDate: '',
-      country: ''
+      country: '',
+      processName: ''
     });
     setPagination(prev => ({ ...prev, page: 1 }));
     fetchConnections(1);
@@ -133,12 +137,13 @@ const ConnectionHistory: React.FC = () => {
 
   const exportData = () => {
     // Create CSV content
-    const headers = ['IP Address', 'Port', 'Type', 'Protocol', 'Status', 'Start Time', 'End Time', 'Duration'];
+    const headers = ['IP Address', 'Port', 'Process', 'Type', 'Protocol', 'Status', 'Start Time', 'End Time', 'Duration'];
     const csvContent = [
       headers.join(','),
       ...connections.map(conn => [
         conn.remoteIP,
         conn.remotePort,
+        conn.processName || 'Unknown',
         conn.connectionType,
         conn.protocol,
         conn.status,
@@ -264,7 +269,7 @@ const ConnectionHistory: React.FC = () => {
       {/* Filters */}
       {showFilters && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 IP Address
@@ -274,6 +279,18 @@ const ConnectionHistory: React.FC = () => {
                 value={filters.ipAddress}
                 onChange={(e) => handleFilterChange('ipAddress', e.target.value)}
                 placeholder="192.168.1.100"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Process Name
+              </label>
+              <input
+                type="text"
+                value={filters.processName}
+                onChange={(e) => handleFilterChange('processName', e.target.value)}
+                placeholder="chrome.exe, svchost.exe"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -421,6 +438,9 @@ const ConnectionHistory: React.FC = () => {
                     Connection
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Process
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Location
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -469,6 +489,11 @@ const ConnectionHistory: React.FC = () => {
                             </div>
                           )}
                         </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 dark:text-white font-medium">
+                        {connection.processName || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

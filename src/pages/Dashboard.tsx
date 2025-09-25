@@ -62,6 +62,7 @@ interface Stats {
 const Dashboard: React.FC = () => {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
+  const [criticalAlerts, setCriticalAlerts] = useState<SecurityAlert[]>([]);
   const [stats, setStats] = useState<Stats>({
     active: 0,
     today: 0,
@@ -85,14 +86,18 @@ const Dashboard: React.FC = () => {
         setIsRefreshing(true);
       }
       
-      const [connectionsData, alertsData, statsData] = await Promise.all([
+      const [connectionsData, alertsData, criticalAlertsData, statsData] = await Promise.all([
         connectionApi.getActive(),
         settingsApi.getAlerts({ limit: 5, acknowledged: false }),
+        settingsApi.getAlerts({ limit: 10, severity: 'CRITICAL', hours: 12 }),
         connectionApi.getStats()
       ]);
 
+      // Critical alerts fetched successfully
+
       setConnections(connectionsData.connections || []);
       setAlerts(alertsData.alerts || []);
+      setCriticalAlerts(criticalAlertsData.alerts || []);
       setStats(statsData.stats || stats);
       setLastUpdated(new Date());
     } catch (error) {
@@ -125,6 +130,8 @@ const Dashboard: React.FC = () => {
     }
     if (socketData.alerts) {
       setAlerts(socketData.alerts);
+      // Don't override critical alerts from WebSocket - they should only be updated via API call
+       // This ensures the 12-hour backend filtering logic is respected
     }
     if (socketData.monitoring) {
       // Update stats from monitoring data if available
@@ -265,7 +272,7 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm">
             {isConnected ? (
               <>
                 <Wifi className="w-4 h-4 text-green-500" />
@@ -497,52 +504,145 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Security Alerts */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
-              Security Alerts
-            </h2>
-          </div>
-          <div className="p-6">
-            {alerts.length === 0 ? (
-              <div className="text-center py-8">
-                <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">No active security alerts</p>
+        {/* Right Column - Critical Alerts and Security Alerts */}
+        <div className="space-y-8">
+          {/* Critical Alerts Section */}
+          {criticalAlerts.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-red-200 dark:border-red-800">
+              <div className="p-6 border-b border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-red-900 dark:text-red-100 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                    Critical Alerts
+                  </h2>
+                  <a 
+                    href="/system-monitor?severity=CRITICAL" 
+                    className="text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
+                  >
+                    View All Critical Alerts →
+                  </a>
+                </div>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                  Displaying critical alerts from the last 12 hours - {criticalAlerts.length} {criticalAlerts.length === 1 ? 'alert' : 'alerts'} requiring attention
+                </p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {alerts.map((alert) => (
-                  <div key={alert._id} className={cn(
-                    "border rounded-lg p-4",
-                    getSeverityColor(alert.severity)
-                  )}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          "px-2 py-1 rounded-full text-xs font-medium",
-                          getSeverityColor(alert.severity)
-                        )}>
-                          {alert.severity}
-                        </span>
-                        <span className="font-medium text-gray-900 dark:text-white">{alert.alertType.replace('_', ' ')}</span>
+              <div className="p-6">
+                <div className="space-y-4">
+                  {criticalAlerts.slice(0, 8).map((alert) => (
+                    <div key={alert._id} className={cn(
+                      "border rounded-lg p-4",
+                      alert.acknowledged 
+                        ? "border-red-300 dark:border-red-700 bg-red-25 dark:bg-red-900/5 opacity-75" 
+                        : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10"
+                    )}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "px-2 py-1 rounded-full text-xs font-medium",
+                            alert.acknowledged 
+                              ? "bg-red-200 dark:bg-red-800/50 text-red-700 dark:text-red-400" 
+                              : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
+                          )}>
+                            CRITICAL
+                          </span>
+                          {alert.acknowledged && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                              ✓ Acknowledged
+                            </span>
+                          )}
+                          <span className={cn(
+                            "font-medium",
+                            alert.acknowledged 
+                              ? "text-red-700 dark:text-red-400" 
+                              : "text-red-900 dark:text-red-100"
+                          )}>
+                            {alert.alertType.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!alert.acknowledged && (
+                            <button
+                              onClick={() => handleAcknowledgeAlert(alert._id)}
+                              className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                            >
+                              Acknowledge
+                            </button>
+                          )}
+                          <button className="text-xs px-3 py-1 bg-white dark:bg-gray-700 border border-red-300 dark:border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-900 dark:text-red-100 transition-colors">
+                            View Details
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleAcknowledgeAlert(alert._id)}
-                        className="text-xs px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
-                      >
-                        Acknowledge
-                      </button>
+                      <p className={cn(
+                        "text-sm mb-2",
+                        alert.acknowledged 
+                          ? "text-red-700 dark:text-red-400" 
+                          : "text-red-900 dark:text-red-100"
+                      )}>
+                        {alert.message}
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {new Date(alert.createdAt).toLocaleString()}
+                        {alert.acknowledged && (
+                          <span className="ml-2 text-green-600 dark:text-green-400">
+                            • Acknowledged
+                          </span>
+                        )}
+                      </p>
                     </div>
-                    <p className="text-sm mb-2 text-gray-900 dark:text-white">{alert.message}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(alert.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            )}
+            </div>
+          )}
+
+          {/* Security Alerts */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+                Security Alerts
+              </h2>
+            </div>
+            <div className="p-6">
+              {alerts.length === 0 ? (
+                <div className="text-center py-8">
+                  <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">No active security alerts</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {alerts.map((alert) => (
+                    <div key={alert._id} className={cn(
+                      "border rounded-lg p-4",
+                      getSeverityColor(alert.severity)
+                    )}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "px-2 py-1 rounded-full text-xs font-medium",
+                            getSeverityColor(alert.severity)
+                          )}>
+                            {alert.severity}
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-white">{alert.alertType.replace('_', ' ')}</span>
+                        </div>
+                        <button
+                          onClick={() => handleAcknowledgeAlert(alert._id)}
+                          className="text-xs px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
+                        >
+                          Acknowledge
+                        </button>
+                      </div>
+                      <p className="text-sm mb-2 text-gray-900 dark:text-white">{alert.message}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {new Date(alert.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
