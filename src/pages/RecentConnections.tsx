@@ -9,8 +9,6 @@ import {
   Shield,
   Globe,
   AlertTriangle,
-  CheckCircle,
-  XCircle,
   RefreshCw,
   UserCheck
 } from 'lucide-react';
@@ -189,18 +187,27 @@ const RecentConnections: React.FC = () => {
     }
   };
 
-  const getSecurityLevelIcon = (level?: string) => {
-    switch (level) {
-      case 'safe': return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'suspicious': return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
-      case 'malicious': return <XCircle className="w-4 h-4 text-red-500" />;
-      default: return <Globe className="w-4 h-4 text-gray-400" />;
+  const getDirectionColor = (direction?: string) => {
+    switch (direction) {
+      case 'inbound': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      case 'outbound': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
+      case 'local': return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+      default: return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
+    }
+  };
+
+  const getDirectionIcon = (direction?: string) => {
+    switch (direction) {
+      case 'inbound': return '↓';
+      case 'outbound': return '↑';
+      case 'local': return '⟷';
+      default: return '?';
     }
   };
 
   const exportConnections = () => {
     const csvContent = [
-      ['Timestamp', 'Remote IP', 'Port', 'Type', 'Status', 'Process', 'Username', 'Domain', 'Security Level'].join(','),
+      ['Timestamp', 'Remote IP', 'Port', 'Type', 'Status', 'Process', 'Username', 'Domain', 'Direction'].join(','),
       ...filteredConnections.map(conn => [
         new Date(conn.startTime).toLocaleString(),
         conn.remoteIP,
@@ -210,7 +217,7 @@ const RecentConnections: React.FC = () => {
         conn.processName || '',
         conn.username || '',
         conn.domain || '',
-        conn.securityRisk || 'unknown'
+        conn.direction || 'unknown'
       ].join(','))
     ].join('\n');
 
@@ -406,7 +413,7 @@ const RecentConnections: React.FC = () => {
                     Process & User
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Security
+                    Direction
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Timestamp
@@ -497,15 +504,13 @@ const RecentConnections: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {getSecurityLevelIcon(connection.securityRisk)}
-                        <span className="text-sm text-gray-600 dark:text-gray-300 capitalize">
-                          {connection.securityRisk || 'Unknown'}
-                        </span>
-                        {connection.isSuspicious && (
-                          <AlertTriangle className="w-4 h-4 text-orange-500" />
-                        )}
-                      </div>
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium",
+                        getDirectionColor(connection.direction)
+                      )}>
+                        <span>{getDirectionIcon(connection.direction)}</span>
+                        {connection.direction || 'unknown'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       <div>

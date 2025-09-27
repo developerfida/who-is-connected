@@ -13,7 +13,9 @@ import {
   Wifi,
   WifiOff,
   Search,
-  Loader2
+  Loader2,
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { connectionApi, settingsApi, monitoringApi } from '@/lib/api';
 import { useAllSocket } from '@/hooks/useSocket';
@@ -75,6 +77,8 @@ const Dashboard: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [scanMessage, setScanMessage] = useState<string>('');
+  const [selectedAlert, setSelectedAlert] = useState<SecurityAlert | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Socket.io for real-time updates
   const { isConnected, data: socketData } = useAllSocket();
@@ -194,10 +198,45 @@ const Dashboard: React.FC = () => {
     try {
       await settingsApi.acknowledgeAlert(alertId);
       await fetchDashboardData(); // Refresh data
+      // Close modal if the acknowledged alert is currently selected
+      if (selectedAlert && selectedAlert._id === alertId) {
+        setIsModalOpen(false);
+        setSelectedAlert(null);
+      }
     } catch (error) {
       console.error('Failed to acknowledge alert:', error);
     }
   };
+
+  const handleViewDetails = (alert: SecurityAlert) => {
+    setSelectedAlert(alert);
+    setIsModalOpen(true);
+    document.body.style.overflow = 'hidden';
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedAlert(null);
+    document.body.style.overflow = 'unset';
+  };
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isModalOpen) {
+        handleCloseModal();
+      }
+    };
+
+    if (isModalOpen) {
+      document.addEventListener('keydown', handleEscKey);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isModalOpen]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -568,7 +607,10 @@ const Dashboard: React.FC = () => {
                               Acknowledge
                             </button>
                           )}
-                          <button className="text-xs px-3 py-1 bg-white dark:bg-gray-700 border border-red-300 dark:border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-900 dark:text-red-100 transition-colors">
+                          <button 
+                            onClick={() => handleViewDetails(alert)}
+                            className="text-xs px-3 py-1 bg-white dark:bg-gray-700 border border-red-300 dark:border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-900 dark:text-red-100 transition-colors"
+                          >
                             View Details
                           </button>
                         </div>
@@ -627,12 +669,20 @@ const Dashboard: React.FC = () => {
                           </span>
                           <span className="font-medium text-gray-900 dark:text-white">{alert.alertType.replace('_', ' ')}</span>
                         </div>
-                        <button
-                          onClick={() => handleAcknowledgeAlert(alert._id)}
-                          className="text-xs px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
-                        >
-                          Acknowledge
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleAcknowledgeAlert(alert._id)}
+                            className="text-xs px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
+                          >
+                            Acknowledge
+                          </button>
+                          <button 
+                            onClick={() => handleViewDetails(alert)}
+                            className="text-xs px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-white"
+                          >
+                            View Details
+                          </button>
+                        </div>
                       </div>
                       <p className="text-sm mb-2 text-gray-900 dark:text-white">{alert.message}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -646,6 +696,160 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Alert Detail Modal */}
+      {isModalOpen && selectedAlert && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div 
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75"
+              onClick={handleCloseModal}
+            ></div>
+
+            {/* Modal panel */}
+            <div className="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-2xl border border-gray-200 dark:border-gray-700">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "p-2 rounded-full",
+                    selectedAlert.severity === 'CRITICAL' 
+                      ? "bg-red-100 dark:bg-red-900/30" 
+                      : "bg-orange-100 dark:bg-orange-900/30"
+                  )}>
+                    <AlertTriangle className={cn(
+                      "w-6 h-6",
+                      selectedAlert.severity === 'CRITICAL' 
+                        ? "text-red-600 dark:text-red-400" 
+                        : "text-orange-600 dark:text-orange-400"
+                    )} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                      Security Alert Details
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Alert ID: {selectedAlert._id}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="space-y-6">
+                {/* Alert Type and Severity */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Alert Type
+                    </label>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {selectedAlert.alertType.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Severity Level
+                    </label>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <span className={cn(
+                        "inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium",
+                        selectedAlert.severity === 'CRITICAL'
+                          ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                          : selectedAlert.severity === 'HIGH'
+                          ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300"
+                          : selectedAlert.severity === 'MEDIUM'
+                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                      )}>
+                        <AlertTriangle className="w-4 h-4" />
+                        {selectedAlert.severity}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Alert Message
+                  </label>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <p className="text-sm text-gray-900 dark:text-white leading-relaxed">
+                      {selectedAlert.message}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Timestamps */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Created At
+                    </label>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                        <span className="text-sm text-gray-900 dark:text-white">
+                          {new Date(selectedAlert.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Status
+                    </label>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <span className={cn(
+                        "inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium",
+                        selectedAlert.acknowledged
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                          : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+                      )}>
+                        {selectedAlert.acknowledged ? (
+                          <CheckCircle className="w-4 h-4" />
+                        ) : (
+                          <Clock className="w-4 h-4" />
+                        )}
+                        {selectedAlert.acknowledged ? 'Acknowledged' : 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    onClick={handleCloseModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Close
+                  </button>
+                  {!selectedAlert.acknowledged && (
+                    <button
+                      onClick={() => handleAcknowledgeAlert(selectedAlert._id)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Acknowledge Alert
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

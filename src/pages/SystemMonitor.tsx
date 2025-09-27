@@ -12,11 +12,14 @@ import {
   Eye,
   EyeOff,
   Calendar,
-  Loader2
+  Loader2,
+  X,
+  Info
 } from 'lucide-react';
 import { settingsApi } from '@/lib/api';
 import { useAllSocket } from '@/hooks/useSocket';
 import { cn } from '@/lib/utils';
+import { getDisplayIP, extractIPFromMessage } from '@/utils/ipExtraction';
 
 interface SecurityAlert {
   _id: string;
@@ -26,6 +29,11 @@ interface SecurityAlert {
   acknowledged: boolean;
   createdAt: string;
   updatedAt?: string;
+  connectionId?: {
+    remoteIP: string;
+    remotePort: number;
+    connectionType: string;
+  };
 }
 
 interface AlertStats {
@@ -58,6 +66,8 @@ const SystemMonitor: React.FC = () => {
   const [selectedAlerts, setSelectedAlerts] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+  const [selectedAlert, setSelectedAlert] = useState<SecurityAlert | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const { isConnected, data: socketData } = useAllSocket();
 
@@ -197,6 +207,42 @@ const SystemMonitor: React.FC = () => {
     setExpandedMessages(newExpanded);
   };
 
+  const handleRowClick = (alert: SecurityAlert, event: React.MouseEvent) => {
+    // Don't open modal if clicking on checkbox, buttons, or interactive elements
+    const target = event.target as HTMLElement;
+    if (target.closest('input[type="checkbox"]') || target.closest('button') || target.closest('a')) {
+      return;
+    }
+    setSelectedAlert(alert);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedAlert(null);
+  };
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isModalOpen) {
+        closeModal();
+      }
+    };
+
+    if (isModalOpen) {
+      document.addEventListener('keydown', handleEscKey);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscKey);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isModalOpen]);
+
   const truncateMessage = (message: string, maxLength: number = 100) => {
     if (message.length <= maxLength) return message;
     return message.substring(0, maxLength) + '...';
@@ -204,10 +250,11 @@ const SystemMonitor: React.FC = () => {
 
   const handleExportCSV = () => {
     const csvContent = [
-      ['Timestamp', 'Alert Type', 'Severity', 'Message', 'Acknowledged'],
+      ['Timestamp', 'Alert Type', 'IP Address', 'Severity', 'Message', 'Acknowledged'],
       ...alerts.map(alert => [
         new Date(alert.createdAt).toLocaleString(),
         alert.alertType,
+        getDisplayIP(alert),
         alert.severity,
         alert.message,
         alert.acknowledged ? 'Yes' : 'No'
@@ -227,7 +274,8 @@ const SystemMonitor: React.FC = () => {
 
   const filteredAlerts = alerts.filter(alert => {
     const matchesSearch = alert.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         alert.alertType.toLowerCase().includes(searchTerm.toLowerCase());
+                         alert.alertType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         getDisplayIP(alert).toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -350,7 +398,7 @@ const SystemMonitor: React.FC = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search alerts by message or type..."
+                placeholder="Search alerts by message, type, or IP address..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -450,6 +498,9 @@ const SystemMonitor: React.FC = () => {
                     Alert Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    IP Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Severity
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -465,7 +516,11 @@ const SystemMonitor: React.FC = () => {
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredAlerts.map((alert) => (
-                  <tr key={alert._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <tr 
+                    key={alert._id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    onClick={(e) => handleRowClick(alert, e)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input
                         type="checkbox"
@@ -485,6 +540,9 @@ const SystemMonitor: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {alert.alertType}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-mono">
+                      {getDisplayIP(alert)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={cn(
@@ -558,6 +616,163 @@ const SystemMonitor: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Alert Detail Modal */}
+       {isModalOpen && selectedAlert && (
+         <div 
+           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+           onClick={closeModal}
+         >
+          <div 
+             className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+             onClick={(e) => e.stopPropagation()}
+           >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "p-2 rounded-lg",
+                  selectedAlert.severity === 'CRITICAL' ? 'bg-red-100 dark:bg-red-900/20' :
+                  selectedAlert.severity === 'HIGH' ? 'bg-orange-100 dark:bg-orange-900/20' :
+                  selectedAlert.severity === 'MEDIUM' ? 'bg-yellow-100 dark:bg-yellow-900/20' :
+                  'bg-blue-100 dark:bg-blue-900/20'
+                )}>
+                  {getSeverityIcon(selectedAlert.severity)}
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    {selectedAlert.alertType}
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {new Date(selectedAlert.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeModal}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6">
+              {/* Severity and Status */}
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Severity</label>
+                  <div className="mt-1">
+                    <span className={cn(
+                      "inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium",
+                      getSeverityColor(selectedAlert.severity)
+                    )}>
+                      {getSeverityIcon(selectedAlert.severity)}
+                      {selectedAlert.severity}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</label>
+                  <div className="mt-1">
+                    <span className={cn(
+                      "inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium",
+                      selectedAlert.acknowledged
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
+                        : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400"
+                    )}>
+                      {selectedAlert.acknowledged ? <CheckCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      {selectedAlert.acknowledged ? 'Acknowledged' : 'Pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connection Information */}
+              {(selectedAlert.connectionId || getDisplayIP(selectedAlert) !== 'N/A') && (
+                <div>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Connection Details</label>
+                  <div className="mt-2 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">IP Address</span>
+                        <p className="text-gray-900 dark:text-white font-mono">
+                          {getDisplayIP(selectedAlert)}
+                          {!selectedAlert.connectionId && getDisplayIP(selectedAlert) !== 'N/A' && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">(extracted from message)</span>
+                          )}
+                        </p>
+                      </div>
+                      {selectedAlert.connectionId && (
+                        <>
+                          <div>
+                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Port</span>
+                            <p className="text-gray-900 dark:text-white font-mono">{selectedAlert.connectionId.remotePort}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Type</span>
+                            <p className="text-gray-900 dark:text-white">{selectedAlert.connectionId.connectionType}</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Message */}
+              <div>
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Alert Message</label>
+                <div className="mt-2 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <p className="text-gray-900 dark:text-white whitespace-pre-wrap">
+                    {selectedAlert.message}
+                  </p>
+                </div>
+              </div>
+
+              {/* Timestamps */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Created At</label>
+                  <p className="mt-1 text-gray-900 dark:text-white">
+                    {new Date(selectedAlert.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                {selectedAlert.updatedAt && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Updated At</label>
+                    <p className="mt-1 text-gray-900 dark:text-white">
+                      {new Date(selectedAlert.updatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={closeModal}
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+                {!selectedAlert.acknowledged && (
+                  <button
+                    onClick={() => {
+                      handleAcknowledgeAlert(selectedAlert._id);
+                      closeModal();
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Acknowledge Alert
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

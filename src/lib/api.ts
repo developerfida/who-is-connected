@@ -74,6 +74,10 @@ export const connectionApi = {
     status?: string;
     connectionType?: string;
     username?: string;
+    direction?: string;
+    country?: string;
+    processName?: string;
+    export?: boolean;
   }) => {
     const searchParams = new URLSearchParams();
     if (params) {

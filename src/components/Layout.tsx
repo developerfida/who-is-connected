@@ -92,7 +92,7 @@ const Layout: React.FC = () => {
             <div className="flex items-center">
               <div className="flex items-center gap-3">
                 <Shield className="w-8 h-8 text-blue-600" />
-                <span className="text-xl font-bold text-gray-900 dark:text-white">SecureMonitor</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-white">FidaApp</span>
               </div>
             </div>
 

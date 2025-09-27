@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 class WindowsConnectionMonitor:
     """Monitor remote connections on Windows systems"""
     
-    def __init__(self, api_base_url: str = "http://localhost:3004/api", poll_interval: int = 5):
+    def __init__(self, api_base_url: str = "http://localhost:3001/api", poll_interval: int = 5):
         self.api_base_url = api_base_url
         self.poll_interval = poll_interval
         self.known_connections = set()
@@ -111,6 +111,7 @@ class WindowsConnectionMonitor:
                             'remote_port': conn.raddr.port,
                             'protocol': 'TCP' if conn.type == socket.SOCK_STREAM else 'UDP',
                             'connection_type': connection_type,
+                            'direction': direction,
                             'process_name': process_name or '',
                             'pid': conn.pid or 0,
                             'username': self._get_connection_user(conn.pid) or '',
@@ -682,13 +683,13 @@ class WindowsConnectionMonitor:
             
             # Enhanced logging for security alerts
             if endpoint == 'security/alert':
-                logger.info(f"🚨 Sending security alert to API: {data.get('alert_type')} - {data.get('severity')} - {data.get('message', '')[:100]}...")
+                logger.info(f"Sending security alert to API: {data.get('alert_type')} - {data.get('severity')} - {data.get('message', '')[:100]}...")
             
             response = requests.post(url, json=data, headers=headers, timeout=10)
             response.raise_for_status()
             
             if endpoint == 'security/alert':
-                logger.info(f"✅ Security alert sent successfully: {data.get('alert_type')} ({data.get('severity')})")
+                logger.info(f"Security alert sent successfully: {data.get('alert_type')} ({data.get('severity')})")
             else:
                 logger.info(f"Successfully sent data to {endpoint}")
             return True
@@ -796,7 +797,7 @@ class WindowsConnectionMonitor:
                         'severity': 'CRITICAL',
                         'message': f'CRITICAL: Multiple connection attempts ({len(recent_attempts)}) from {ip} in the last 5 minutes - Possible brute force attack'
                     }
-                    logger.critical(f"🔥 CRITICAL SECURITY ALERT: {alert_data['message']}")
+                    logger.critical(f"CRITICAL SECURITY ALERT: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
                 elif len(recent_attempts) >= 4:  # 4-5 attempts - HIGH severity
                     alert_data = {
@@ -804,7 +805,7 @@ class WindowsConnectionMonitor:
                         'severity': 'HIGH',
                         'message': f'Multiple connection attempts ({len(recent_attempts)}) from {ip} in the last 5 minutes'
                     }
-                    logger.warning(f"🚨 HIGH SECURITY ALERT: {alert_data['message']}")
+                    logger.warning(f"HIGH SECURITY ALERT: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
                 elif len(recent_attempts) >= 2:  # 2-3 attempts - MEDIUM severity
                     alert_data = {
@@ -812,7 +813,7 @@ class WindowsConnectionMonitor:
                         'severity': 'MEDIUM',
                         'message': f'Multiple connection attempts ({len(recent_attempts)}) from {ip} detected'
                     }
-                    logger.info(f"⚠️  Security notice: {alert_data['message']}")
+                    logger.info(f"Security notice: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
             
             # Check for connections on suspicious ports
@@ -824,7 +825,7 @@ class WindowsConnectionMonitor:
                         'severity': 'MEDIUM',
                         'message': f'Connection from suspicious port {conn["remote_port"]} detected from {conn["remote_ip"]}'
                     }
-                    logger.warning(f"🚨 Suspicious port alert: {alert_data['message']}")
+                    logger.warning(f"Suspicious port alert: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
             
             # Check for non-standard protocols on standard ports
@@ -835,7 +836,7 @@ class WindowsConnectionMonitor:
                         'severity': 'MEDIUM',
                         'message': f'Non-RDP connection on RDP port 3389 from {conn["remote_ip"]} (Type: {conn["connection_type"]})'
                     }
-                    logger.warning(f"🚨 Unusual activity: {alert_data['message']}")
+                    logger.warning(f"Unusual activity: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
                 
                 # Check for SSH on non-standard ports
@@ -845,7 +846,7 @@ class WindowsConnectionMonitor:
                         'severity': 'LOW',
                         'message': f'SSH connection on non-standard port {conn["local_port"]} from {conn["remote_ip"]}'
                     }
-                    logger.info(f"ℹ️  SSH on unusual port: {alert_data['message']}")
+                    logger.info(f"SSH on unusual port: {alert_data['message']}")
                     self.send_to_api('security/alert', alert_data)
             
             # Check for connections from suspicious countries
@@ -861,7 +862,7 @@ class WindowsConnectionMonitor:
                             'severity': 'CRITICAL',
                             'message': f'CRITICAL: Connection from high-threat country {geo_data.get("country", "Unknown")} ({country_code}) detected from {conn["remote_ip"]} - State-sponsored threat risk'
                         }
-                        logger.critical(f"🔥 CRITICAL COUNTRY THREAT: {alert_data['message']}")
+                        logger.critical(f"CRITICAL COUNTRY THREAT: {alert_data['message']}")
                         self.send_to_api('security/alert', alert_data)
                     elif risk_level == 'high':
                         alert_data = {
@@ -869,7 +870,7 @@ class WindowsConnectionMonitor:
                             'severity': 'HIGH',
                             'message': f'Connection from high-risk country {geo_data.get("country", "Unknown")} ({country_code}) detected from {conn["remote_ip"]}'
                         }
-                        logger.warning(f"🚨 HIGH RISK COUNTRY: {alert_data['message']}")
+                        logger.warning(f"HIGH RISK COUNTRY: {alert_data['message']}")
                         self.send_to_api('security/alert', alert_data)
             
             # Check for failed connection patterns (if we can detect them)
@@ -931,7 +932,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Windows Remote Connection Monitor')
-    parser.add_argument('--api-url', default='http://localhost:3004/api', help='API base URL')
+    parser.add_argument('--api-url', default='http://localhost:3001/api', help='API base URL')
     parser.add_argument('--interval', type=int, default=5, help='Polling interval in seconds')
     parser.add_argument('--log-level', default='INFO', help='Logging level')
     parser.add_argument('--scan', action='store_true', help='Perform a one-time scan and exit')

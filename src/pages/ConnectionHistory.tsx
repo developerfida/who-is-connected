@@ -135,36 +135,101 @@ const ConnectionHistory: React.FC = () => {
     fetchConnections(newPage);
   };
 
-  const exportData = () => {
-    // Create CSV content
-    const headers = ['IP Address', 'Port', 'Process', 'Type', 'Protocol', 'Status', 'Start Time', 'End Time', 'Duration'];
-    const csvContent = [
-      headers.join(','),
-      ...connections.map(conn => [
-        conn.remoteIP,
-        conn.remotePort,
-        conn.processName || 'Unknown',
-        conn.connectionType,
-        conn.protocol,
-        conn.status,
-        new Date(conn.startTime).toLocaleString(),
-        conn.endTime ? new Date(conn.endTime).toLocaleString() : 'Active',
-        conn.endTime 
-          ? Math.round((new Date(conn.endTime).getTime() - new Date(conn.startTime).getTime()) / 1000 / 60) + ' min'
-          : 'Ongoing'
-      ].join(','))
-    ].join('\n');
+  const [isExporting, setIsExporting] = useState(false);
 
-    // Download CSV
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `connection-history-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+  const exportData = async () => {
+    if (isExporting) return;
+    
+    // Check if any filters are applied
+    const hasFilters = filters.ipAddress || filters.connectionType || filters.direction || 
+                      filters.status || filters.startDate || filters.endDate || 
+                      filters.country || filters.processName;
+    
+    // Show confirmation with appropriate message
+    const confirmMessage = hasFilters 
+      ? `This will export ALL filtered connection records (not just the current page). This may include hundreds or thousands of records matching your current filters. Continue?`
+      : `This will export all connection history records from the database${pagination.total > 0 ? ` (approximately ${pagination.total} records)` : ''}. This may take a moment. Continue?`;
+    
+    const confirmExport = window.confirm(confirmMessage);
+    
+    if (!confirmExport) return;
+    
+    setIsExporting(true);
+    
+    try {
+      // Prepare parameters for fetching all records
+      const params: any = {
+        export: true, // Flag to indicate we want all records
+        limit: 0 // No limit for export
+      };
+
+      // Add current filters to export
+      if (filters.ipAddress) params.ipAddress = filters.ipAddress;
+      if (filters.connectionType) params.connectionType = filters.connectionType;
+      if (filters.direction) params.direction = filters.direction;
+      if (filters.status) params.status = filters.status;
+      if (filters.startDate) params.startDate = filters.startDate;
+      if (filters.endDate) params.endDate = filters.endDate;
+      if (filters.country) params.country = filters.country;
+      if (filters.processName) params.processName = filters.processName;
+
+      // Fetch all records for export
+      const exportData = await connectionApi.getHistory(params);
+      const allConnections = exportData.connections || [];
+      
+      if (allConnections.length === 0) {
+        alert('No records found to export.');
+        return;
+      }
+
+      // Create CSV content with all records
+      const headers = ['IP Address', 'Port', 'Process', 'Type', 'Protocol', 'Status', 'Start Time', 'End Time', 'Duration', 'Country', 'Domain', 'Username'];
+      const csvContent = [
+        headers.join(','),
+        ...allConnections.map(conn => [
+          conn.remoteIP,
+          conn.remotePort,
+          conn.processName || 'Unknown',
+          conn.connectionType,
+          conn.protocol,
+          conn.status,
+          new Date(conn.startTime).toLocaleString(),
+          conn.endTime ? new Date(conn.endTime).toLocaleString() : 'Active',
+          conn.endTime 
+            ? Math.round((new Date(conn.endTime).getTime() - new Date(conn.startTime).getTime()) / 1000 / 60) + ' min'
+            : 'Ongoing',
+          conn.geoLocation?.country || '',
+          conn.domain || '',
+          conn.username || ''
+        ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      // Download CSV with appropriate filename
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const filename = hasFilters 
+        ? `connection-history-filtered-${new Date().toISOString().split('T')[0]}.csv`
+        : `connection-history-all-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      // Show success message with context
+      const successMessage = hasFilters 
+        ? `Successfully exported ${allConnections.length} filtered connection records.`
+        : `Successfully exported ${allConnections.length} connection records.`;
+      alert(successMessage);
+      
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export data. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const getStatusColor = (status: string, isBlocked: boolean) => {
@@ -258,10 +323,30 @@ const ConnectionHistory: React.FC = () => {
           </button>
           <button
             onClick={exportData}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            disabled={isExporting}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
+              isExporting
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 text-white hover:bg-green-700"
+            )}
           >
-            <Download className="w-4 h-4" />
-            Export CSV
+            {isExporting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                {(() => {
+                  const hasFilters = filters.ipAddress || filters.connectionType || filters.direction || 
+                                    filters.status || filters.startDate || filters.endDate || 
+                                    filters.country || filters.processName;
+                  return hasFilters ? 'Export Filtered Records' : 'Export All Records';
+                })()}
+              </>
+            )}
           </button>
         </div>
       </div>

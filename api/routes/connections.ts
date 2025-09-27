@@ -12,7 +12,7 @@ const router = Router();
 // Validation schemas
 const historyQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(20),
+  limit: Joi.number().integer().min(0).max(100).default(20),
   startDate: Joi.date().iso(),
   endDate: Joi.date().iso(),
   ipAddress: Joi.string().ip(),
@@ -20,7 +20,9 @@ const historyQuerySchema = Joi.object({
   connectionType: Joi.string().valid('RDP', 'SSH', 'VNC', 'TeamViewer', 'HTTP', 'HTTPS', 'WebSocket', 'Other'),
   username: Joi.string().max(50),
   processName: Joi.string().max(100),
-  country: Joi.string().max(10)
+  country: Joi.string().max(10),
+  direction: Joi.string().valid('inbound', 'outbound', 'local'),
+  export: Joi.boolean().default(false)
 });
 
 const terminateSchema = Joi.object({
@@ -86,7 +88,17 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const { page, limit, startDate, endDate, ipAddress, status, connectionType, username, processName, country } = value;
+    // Additional validation: limit=0 is only allowed when export=true
+    if (value.limit === 0 && !value.export) {
+      res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        details: 'limit cannot be 0 unless export is true'
+      });
+      return;
+    }
+
+    const { page, limit, startDate, endDate, ipAddress, status, connectionType, username, processName, country, direction, export: isExport } = value;
     const userId = req.user?._id;
 
     // Build query
@@ -128,16 +140,25 @@ router.get('/history', authenticate, async (req: AuthRequest, res: Response): Pr
     if (connectionType) query.connectionType = connectionType;
     if (processName) query.processName = { $regex: processName, $options: 'i' };
     if (country) query['geoLocation.countryCode'] = country;
+    if (direction) query.direction = direction;
 
     // Get total count
     const total = await ConnectionLog.countDocuments(query);
 
-    // Get paginated results
-    const connections = await ConnectionLog.find(query)
-      .sort({ startTime: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate('userId', 'username role');
+    // For export, get all records without pagination
+    let connections;
+    if (isExport) {
+      connections = await ConnectionLog.find(query)
+        .sort({ startTime: -1 })
+        .populate('userId', 'username role');
+    } else {
+      // Get paginated results
+      connections = await ConnectionLog.find(query)
+        .sort({ startTime: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('userId', 'username role');
+    }
 
     res.json({
       success: true,
